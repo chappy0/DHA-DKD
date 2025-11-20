@@ -1,9 +1,7 @@
 Hybrid Attention Mechanism with Decoupled Distillation
 
 
-
 Note: This is the official implementation of the manuscript "Hybrid Attention Mechanism with Decoupled Distillation: Enhancing Efficiency and Fidelity in Diffusion Models", currently submitted to The Visual Computer.
-
 
 📖 Introduction
 
@@ -14,8 +12,6 @@ Dynamic Hybrid Attention (DHA): A mechanism that synergizes the high-fidelity lo
 Decoupled Knowledge Distillation (DKD): A training framework designed to effectively train this heterogeneous architecture.
 
 Our approach achieves a 1.3x speedup and reduces peak GPU memory by 8% during inference, while maintaining nearly indistinguishable quality and full controllability compared to the original model.
-
-
 
 🚀 Quick Start Guide
 
