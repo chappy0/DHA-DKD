@@ -89,7 +89,7 @@ Use fcdiffusion\_student\_test.py to evaluate the trained DHA-based student mode
    * input\_image\_path: Source image for testing.  
    * output\_dir: Directory for results.  
 2. **Run Inference**:  
-   python fcdiffusion\_student\_test.py
+   python fcdiffusion\_test\_student.py
 
 ## **📌 Citation**
 
