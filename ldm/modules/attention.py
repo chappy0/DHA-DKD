@@ -5,6 +5,16 @@ import torch.nn.functional as F
 from torch import nn, einsum
 from einops import rearrange, repeat
 from typing import Optional, Any
+from functools import partial
+import math
+
+import numpy as np
+import torch.nn as nn
+from torch.nn.modules.batchnorm import _BatchNorm
+from sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+
+
+norm_layer = partial(SynchronizedBatchNorm2d, momentum=0.1)
 
 from ldm.modules.diffusionmodules.util import checkpoint
 
@@ -345,22 +355,6 @@ class GroupedDoubleNormalization(nn.Module):
         return norm_x
 
 
-
-
-from functools import partial
-import math
-
-import numpy as np
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.modules.batchnorm import _BatchNorm
-
-from sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-
-
-norm_layer = partial(SynchronizedBatchNorm2d, momentum=0.1)
 
 class Bottleneck(nn.Module):
     expansion = 4
