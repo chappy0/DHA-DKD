@@ -497,8 +497,8 @@ class MultiHeadExternalAttention(nn.Module):
     def _act_dn(self, x):
         B, C, N = x.shape
         x = x.view(B, self.num_heads, self.inter_channels // self.num_heads, N)
-        attn = F.softmax(x * self.scale, dim=-1)   # ✅ 先保存
-        self.attn_map = attn                       # ✅ 缓存：(B,H,M,N)
+        attn = F.softmax(x * self.scale, dim=-1)   
+        self.attn_map = attn                       
         x = attn / (torch.sum(attn, dim=2, keepdim=True) + 1e-6)
         return x.view(B, self.inter_channels, N)
 
