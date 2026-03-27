@@ -32,9 +32,7 @@ def get_attn_map_hook(mem, name):
         mem[name] = getattr(module, 'attn_map', None)
     return get_output_hook
 
-# ----------------------------------------------------------------------------------
-# 2.DecoupledDistiller
-# ----------------------------------------------------------------------------------
+
 class DecoupledDistiller(pl.LightningModule):
     def __init__(
         self,
@@ -50,10 +48,13 @@ class DecoupledDistiller(pl.LightningModule):
         lambda_kd_unet_stage1: float,
         lambda_kd_control_stage1: float,
         lambda_kd_fcnet_stage1: float,
+        lambda_attn_kl_stage1:float,
         lambda_sd_stage2: float,     
         lambda_kd_unet_stage2: float,
         lambda_kd_control_stage2: float,
         lambda_kd_fcnet_stage2: float,
+        lambda_attn_kl_stage2:float
+        
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -145,13 +146,12 @@ class DecoupledDistiller(pl.LightningModule):
                         print(f"Hooked Student EA map for key: {hook_key}")
 
             except AttributeError:
-
                 print(f"Warning: Submodule for key '{key}' not found, skipping hook.")
                 continue
 
 
-    def _calculate_losses(self, batch, lambda_sd, lambda_kd_unet, lambda_kd_control, lambda_kd_fcnet):
-        lambda_attn_kl = 0.016
+    def _calculate_losses(self, batch, lambda_sd, lambda_kd_unet, lambda_kd_control, lambda_kd_fcnet, lambda_attn_kl):
+
         with torch.no_grad():
             z0, c_dict = self.teacher_model.get_input(batch, self.teacher_model.first_stage_key)
             hint = torch.cat(c_dict['c_concat'], 1)
@@ -165,6 +165,7 @@ class DecoupledDistiller(pl.LightningModule):
         with torch.no_grad():
             control_teacher = self.teacher_model.control_model(x=z_noisy, hint=hint, timesteps=t, context=cond_txt)
             _ = self.teacher_model.model.diffusion_model(x=z_noisy, timesteps=t, context=cond_txt, control=list(control_teacher))
+
 
         self.acts_stu_unet.clear(); self.acts_stu_fcnet.clear()
         control_student = self.student_model.control_model(x=z_noisy, hint=hint, timesteps=t, context=cond_txt)
@@ -217,6 +218,7 @@ class DecoupledDistiller(pl.LightningModule):
                 losses_kd_fcnet.append(F.mse_loss(a_stu, a_tea))
         loss_kd_fcnet = torch.stack(losses_kd_fcnet).mean() if losses_kd_fcnet else torch.tensor(0.0, device=self.device)
 
+
         total_loss = (lambda_sd * loss_sd +
                       lambda_kd_unet * loss_kd_unet +
                       lambda_kd_control * loss_kd_control +
@@ -231,12 +233,15 @@ class DecoupledDistiller(pl.LightningModule):
         if sa_attn is None or ea_attn is None:
             return torch.tensor(0.0, device=self.device)
 
+
         if sa_attn.dim() == 3:
             B, H, _, _ = ea_attn.shape
             sa_attn = sa_attn.view(B, H, sa_attn.shape[1], sa_attn.shape[2])
 
+
         sa_attn_resized = sa_attn
         ea_attn_resized = F.adaptive_avg_pool2d(ea_attn, (sa_attn_resized.shape[-2], sa_attn_resized.shape[-1]))
+
         
         log_p = F.log_softmax(ea_attn_resized / T, dim=-1)
         q     = F.softmax(sa_attn_resized / T, dim=-1)
@@ -246,21 +251,21 @@ class DecoupledDistiller(pl.LightningModule):
     def _get_alpha_for_key(self, key):
 
         for name, module in self.student_model.named_modules():
-
-            if key in name and isinstance(module, DynamicHybridAttention): 
-
+            if key in name and isinstance(module,DynamicHybridAttention): 
                 alpha = getattr(module, 'global_alpha_cache', None)
                 if alpha is not None:
                     return alpha.view(1, 1, 1) 
+
+
 
         return torch.tensor(1.0, device=self.device).view(1, 1, 1)
         
     def training_step(self, batch, batch_idx):
         # Determine current lambdas based on training stage
         if self.global_step < self.hparams.stage_switch_step:
-            lambdas = (self.hparams.lambda_sd_stage1, self.hparams.lambda_kd_unet_stage1, self.hparams.lambda_kd_control_stage1, self.hparams.lambda_kd_fcnet_stage1)
+            lambdas = (self.hparams.lambda_sd_stage1, self.hparams.lambda_kd_unet_stage1, self.hparams.lambda_kd_control_stage1, self.hparams.lambda_kd_fcnet_stage1,self.hparams.lambda_attn_kl_stage1)
         else:
-            lambdas = (self.hparams.lambda_sd_stage2, self.hparams.lambda_kd_unet_stage2, self.hparams.lambda_kd_control_stage2, self.hparams.lambda_kd_fcnet_stage2)
+            lambdas = (self.hparams.lambda_sd_stage2, self.hparams.lambda_kd_unet_stage2, self.hparams.lambda_kd_control_stage2, self.hparams.lambda_kd_fcnet_stage2,self.hparams.lambda_attn_kl_stage2)
 
 
         total_loss, loss_sd, loss_kd_unet, loss_kd_control, loss_kd_fcnet, loss_attn_kl = self._calculate_losses(batch, *lambdas)
@@ -278,9 +283,9 @@ class DecoupledDistiller(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         # Use stage 1 weights for validation ---
-        lambdas = (self.hparams.lambda_sd_stage1, self.hparams.lambda_kd_unet_stage1, self.hparams.lambda_kd_control_stage1, self.hparams.lambda_kd_fcnet_stage1)
+        lambdas = (self.hparams.lambda_sd_stage1, self.hparams.lambda_kd_unet_stage1, self.hparams.lambda_kd_control_stage1, self.hparams.lambda_kd_fcnet_stage1,self.hparams.lambda_attn_kl_stage1)
         
-        # total_val_loss, _, _, _, _ = self._calculate_losses(batch, *lambdas)
+
         total_val_loss, _, _, _, _, _ = self._calculate_losses(batch, *lambdas)
         
         self.log("val_loss", total_val_loss, prog_bar=True, on_epoch=True, sync_dist=True)
@@ -324,9 +329,7 @@ class DecoupledDistiller(pl.LightningModule):
         model = model.to(device)
         return model
 
-# ----------------------------------------------------------------------------------
-# 3. dataset and main function
-# ----------------------------------------------------------------------------------
+
 class ValidationDataset(Dataset):
     def __init__(self, data_list):
         self.data = data_list
@@ -368,8 +371,8 @@ if __name__ == "__main__":
     student_config_path = 'configs/student_model_config.yaml'
     
     DISTILL_MODE = "low_pass"
-    TEACHER_CKPT_PATH = "you/path/to/your/teacher/model"
-    STUDENT_BASE_CKPT_PATH = "you/path/to/your/student/model"
+    TEACHER_CKPT_PATH = "path/to/your/teacher/checkpoint"
+    STUDENT_BASE_CKPT_PATH = 'path/to/your/student/ckpt'
 
     # --- 2. Instantiate a new Decoupled Distiller.
     model = DecoupledDistiller(
@@ -386,23 +389,27 @@ if __name__ == "__main__":
         
         # Weights for the first phase: focus on imitation (balance the weighted losses initially).
         
-        lambda_sd_stage1=5,
+        lambda_sd_stage1=6,
         lambda_kd_unet_stage1=0.04,
         lambda_kd_fcnet_stage1=0.03,
-        lambda_kd_control_stage1=0.63,
+        lambda_kd_control_stage1=0.60,
+        lambda_attn_kl_stage1=0.016,
+        
+        
         # Weights for the second phase: focus on self-quality (significantly increase the weight of loss_sd).
-        lambda_sd_stage2=8,
-        lambda_kd_unet_stage2=0.04,    
-        lambda_kd_fcnet_stage2=0.03,
-        lambda_kd_control_stage2=0.63,
+        lambda_sd_stage2=10,
+        lambda_kd_unet_stage2=0.04, 
+        lambda_kd_fcnet_stage2=0.03,        
+        lambda_kd_control_stage2=0.60,
+        lambda_attn_kl_stage2=0.005
 
     )
 
 
-    train_dataset = TrainDataset('../DGM/datasets/training_data.json', cache_size=100)
+    train_dataset = TrainDataset('/path/to/your/data', cache_size=100)
     train_dataloader = DataLoader(train_dataset, num_workers=4, batch_size=16, shuffle=True)
     
-    validation_folder_path = '../DGM/datasets/test_sub_200'
+    validation_folder_path = 'path/to/your/validation data'
     val_data_list = traverse_images_and_texts(validation_folder_path)
     val_dataloader = None
     if val_data_list:
@@ -432,6 +439,7 @@ if __name__ == "__main__":
         log_every_n_steps=50,
         val_check_interval=1.0, 
         gradient_clip_val=1.0,
+
     )
     
     print(f"Starting Decoupled Distillation for mode: {DISTILL_MODE}...")
