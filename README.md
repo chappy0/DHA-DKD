@@ -2,7 +2,7 @@
 
 ![Demo Animation](demo_carousel.gif)
 
-[![DOI](https://zenodo.org/badge/DOI/YOUR_ZENODO_DOI.svg)](https://doi.org/10.5281/zenodo.20586934)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20586934.svg)](https://doi.org/10.5281/zenodo.20586934)
 
 **Note:** This is the official implementation of the manuscript **"Efficient Controllable Diffusion via Dynamic Hybrid Attention and Decoupled Knowledge Distillation"**, currently submitted to **The Visual Computer**.
 
