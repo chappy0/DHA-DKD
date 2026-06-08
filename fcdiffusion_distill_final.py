@@ -399,10 +399,10 @@ if __name__ == "__main__":
     )
 
 
-    train_dataset = TrainDataset('../DGM/datasets/training_data.json', cache_size=100)
+    train_dataset = TrainDataset('path/to/your/train data', cache_size=100)
     train_dataloader = DataLoader(train_dataset, num_workers=4, batch_size=16, shuffle=True)
     
-    validation_folder_path = '../DGM/datasets/test_sub_200'
+    validation_folder_path = 'path/to/your/validation data'
     val_data_list = traverse_images_and_texts(validation_folder_path)
     val_dataloader = None
     if val_data_list:
